@@ -1,9 +1,9 @@
 import requests
 import json
+import time
 from flask import Flask, jsonify
 from tradingview_ta import TA_Handler, Interval
-from datetime import datetime, timedelta
-import os
+from datetime import datetime
 
 app = Flask(__name__)
 
@@ -13,10 +13,10 @@ webhook_url = "https://hook.eu2.make.com/ietls2a87fkk5t83k05gnqvviq6mm5ax"
 # List of stock symbols
 symbols = ['AVN', 'SYS', 'MEBL', 'OGDC', 'LUCK', 'MLCF', 'FCCL', 'HCAR', 'SAZEW', 'KSE100']
 
-# File to store price history (Vercel is stateless, so this is a temporary file)
+# File to store price history (temporary bypass for Vercel)
 PRICE_LOG_FILE = "/tmp/price_log.json"
 
-# Function to fetch current prices
+# Function to fetch current prices with delay
 def fetch_prices():
     results = {}
     for ticker in symbols:
@@ -27,22 +27,19 @@ def fetch_prices():
                 exchange='PSX',
                 interval=Interval.INTERVAL_1_DAY
             ).get_analysis()
-            results[ticker] = analysis.indicators['close']
+            results[ticker] = analysis.indicators.get('close', 'No data')
         except Exception as e:
             results[ticker] = f"Error: {str(e)}"
+        time.sleep(1)  # Add 1-second delay between requests
     return results
 
 # Function to load previous prices
 def load_previous_prices():
-    if os.path.exists(PRICE_LOG_FILE):
-        with open(PRICE_LOG_FILE, 'r') as f:
-            return json.load(f)
-    return {}
+    return {}  # Bypass file operation for now
 
-# Function to save prices
+# Function to save prices (temporary console log)
 def save_prices(prices):
-    with open(PRICE_LOG_FILE, 'w') as f:
-        json.dump(prices, f)
+    print("Prices would be saved:", prices)  # Log to console instead of file
 
 # Function to check for holidays
 def is_holiday(current_prices, previous_prices):
@@ -56,50 +53,34 @@ def is_holiday(current_prices, previous_prices):
 # Main endpoint to fetch prices and process
 @app.route('/fetch-prices', methods=['GET'])
 def fetch_prices_endpoint():
-    # Get current date
-    current_date = datetime.now().strftime("%Y-%m-%d")
-    
-    # Fetch current prices
-    current_prices = fetch_prices()
-    
-    # Load previous prices
-    previous_prices = load_previous_prices()
-    
-    # Check for holiday
-    holiday = is_holiday(current_prices, previous_prices)
-    
-    # Log prices (unless it's a holiday)
-    if not holiday:
-        log_entry = {
-            "date": current_date,
-            "prices": current_prices
-        }
-        # Append to log (simulating persistent storage)
-        log_data = []
-        if os.path.exists(PRICE_LOG_FILE):
-            with open(PRICE_LOG_FILE, 'r') as f:
-                log_data = json.load(f)
-            if not isinstance(log_data, list):
-                log_data = [log_data]
-        log_data.append(log_entry)
-        with open(PRICE_LOG_FILE, 'w') as f:
-            json.dump(log_data, f)
+    try:
+        current_date = datetime.now().strftime("%Y-%m-%d")
+        current_prices = fetch_prices()
+        previous_prices = load_previous_prices()
+        holiday = is_holiday(current_prices, previous_prices)
         
-        # Send prices to webhook
-        response = requests.post(webhook_url, json=current_prices)
-        result = {
-            "status_code": response.status_code,
-            "response": response.text,
-            "holiday": holiday,
-            "prices": current_prices
-        }
-    else:
-        result = {
-            "message": "Market closed (holiday detected)",
-            "holiday": holiday,
-            "prices": current_prices
-        }
-    
+        if not holiday:
+            log_entry = {"date": current_date, "prices": current_prices}
+            save_prices(log_entry)
+            # Skip webhook if all prices are errors
+            all_errors = all(isinstance(v, str) and v.startswith("Error:") for v in current_prices.values())
+            if not all_errors:
+                try:
+                    response = requests.post(webhook_url, json=current_prices, timeout=10)
+                    result = {
+                        "status_code": response.status_code,
+                        "response": response.text,
+                        "holiday": holiday,
+                        "prices": current_prices
+                    }
+                except requests.RequestException as e:
+                    result = {"error": str(e), "holiday": holiday, "prices": current_prices}
+            else:
+                result = {"message": "All prices errored, webhook skipped", "holiday": holiday, "prices": current_prices}
+        else:
+            result = {"message": "Market closed (holiday detected)", "holiday": holiday, "prices": current_prices}
+    except Exception as e:
+        return jsonify({"error": str(e), "message": "Function failed, check logs"}), 500
     return jsonify(result)
 
 # Root endpoint for testing
