@@ -1,3 +1,4 @@
-Flask==2.0.1
-requests==2.28.1
-tradingview_ta==3.3.0
+Flask==2.3.3 
+requests==2.32.3 
+tradingview_ta==3.3.0 
+werkzeug==2.3.0
