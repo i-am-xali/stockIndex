@@ -1,4 +1,4 @@
 Flask==2.3.3 
 requests==2.32.3 
 tradingview_ta==3.3.0 
-werkzeug==2.3.0
+werkzeug==2.3.8
