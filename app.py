@@ -17,7 +17,7 @@ symbols = ['AVN', 'SYS', 'MEBL', 'OGDC', 'LUCK', 'MLCF', 'FCCL', 'HCAR', 'SAZEW'
 # File to store price history (temporary for Vercel)
 PRICE_LOG_FILE = "/tmp/price_log.json"
 
-# Function to fetch current prices with delay
+# Function to fetch current prices with increased delay
 def fetch_prices():
     results = {}
     for ticker in symbols:
@@ -31,7 +31,7 @@ def fetch_prices():
             results[ticker] = analysis.indicators.get('close', 'No data')
         except Exception as e:
             results[ticker] = f"Error: {str(e)}"
-        time.sleep(1)  # Add 1-second delay between requests
+        time.sleep(3)  # Increased to 3-second delay between requests
     return results
 
 # Function to load previous prices
